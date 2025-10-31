@@ -1,8 +1,11 @@
-name: DynamicConfig Auto Switch (Beijing Time)
+name: DynamicConfig Auto Switch (Beijing Time - Fixed Schedule)
 
 on:
   schedule:
-    - cron: '0 * * * *'   # 每小时执行一次（UTC时间）
+    # 周五 18:00（北京时间）→ 启用活动倍率
+    - cron: '0 10 * * 5'
+    # 周一 00:00（北京时间）→ 恢复日常倍率
+    - cron: '0 16 * * 0'
   workflow_dispatch:
     inputs:
       force_mode:
@@ -13,43 +16,33 @@ on:
 permissions:
   contents: write
 
-env:
-  TZ: Asia/Shanghai  # 设置为北京时间
-
 jobs:
   update:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Determine mode (北京时间)
+      - name: Determine mode (固定时间切换)
         id: setmode
         run: |
           FORCE="${{ github.event.inputs.force_mode }}"
           if [ -n "$FORCE" ]; then
             MODE="$FORCE"
           else
-            # 获取北京时间的小时与星期
-            HOUR=$(date +'%H')
-            DOW=$(date +'%u')  # 1=周一 ... 7=周日
-
-            # 判断时间段：
-            # 周五 18:00（含）至周一 00:00 为活动倍率
-            if [ "$DOW" -eq 5 ] && [ "$HOUR" -ge 18 ]; then
-              MODE="event"
-            elif [ "$DOW" -eq 6 ] || [ "$DOW" -eq 7 ]; then
-              MODE="event"
-            elif [ "$DOW" -eq 1 ] && [ "$HOUR" -lt 1 ]; then
+            # 自动判定模式仅在触发时有效
+            UTC_HOUR=$(date -u +%H)
+            UTC_DOW=$(date -u +%u)
+            if [ "$UTC_DOW" -eq 5 ] && [ "$UTC_HOUR" -eq 10 ]; then
               MODE="event"
             else
               MODE="normal"
             fi
           fi
-
           echo "mode=$MODE" >> $GITHUB_OUTPUT
-          echo "当前北京时间：$(date '+%Y-%m-%d %H:%M:%S')"
-          echo "当前模式：$MODE"
+          echo "当前北京时间：$(date '+%Y-%m-%d %H:%M:%S')，切换为：$MODE"
 
       - name: Apply DynamicConfig template
         run: |
